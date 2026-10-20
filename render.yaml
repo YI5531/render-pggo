@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: render-pggo
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: CF_BASE
+        sync: false
+      - key: CF_TOKEN
+        sync: false
+      - key: PROXY_API_KEY
+        sync: false
+      - key: WAA_BACKEND
+        value: go
+      - key: UPSTREAM_CHANNELS
+        value: playground,build
