@@ -79,7 +79,7 @@ async function main() {
           console.error(`[sync] ✖ label=${cred.label || cred.id} 导入失败：${e.message}`);
         }
       }
-      if (changed.length > 0) {
+      if (changed.length > 0 || credentials.length > 0) {
         await triggerStartService();
       }
       backoff = 0;
@@ -239,6 +239,11 @@ async function ensureSession() {
 
 async function triggerStartService() {
   try {
+    const stRes = await adminFetch("/api/status");
+    if (stRes.ok) {
+      const st = await stRes.json().catch(() => null);
+      if (st && st.running) return;
+    }
     const res = await adminFetch("/api/control/start", { method: "POST" });
     if (res.ok) {
       log("✔ 已触发 AIStudio2API 服务启动 (POST /api/control/start)");

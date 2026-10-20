@@ -28,6 +28,7 @@ function startAiStudio2Api() {
     PROXY_API_KEY: process.env.PROXY_API_KEY || process.env.API_KEY || "",
     WAA_BACKEND: process.env.WAA_BACKEND || "go",
     UPSTREAM_CHANNELS: process.env.UPSTREAM_CHANNELS || "playground,build",
+    BUILD_NATIVE_NONSTREAM: process.env.BUILD_NATIVE_NONSTREAM || "true",
     ADMIN_AUTH_ENABLED: "false",
     AUTO_START: "true",
   };
@@ -145,6 +146,15 @@ function proxyToInternal(req, res) {
 const server = http.createServer((req, res) => {
   const url = req.url || "/";
   if (url === "/health" || url.startsWith("/health?")) {
+    // 顺带异步自检：若 aistudio2api 处于 STOPPED 状态且已有账号，自动拉起服务
+    fetch(`${INTERNAL_BASE}/api/status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((st) => {
+        if (st && !st.running && st.state === "STOPPED" && st.accounts?.total > 0) {
+          return fetch(`${INTERNAL_BASE}/api/control/start`, { method: "POST" });
+        }
+      })
+      .catch(() => {});
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true, service: "render-pggo", uptime: Math.round(process.uptime()), ts: Date.now() }));
     return;
