@@ -146,7 +146,31 @@ const server = http.createServer((req, res) => {
   const url = req.url || "/";
   if (url === "/health" || url.startsWith("/health?")) {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, service: "render-pggo", ts: Date.now() }));
+    res.end(JSON.stringify({ ok: true, service: "render-pggo", uptime: Math.round(process.uptime()), ts: Date.now() }));
+    return;
+  }
+  if (req.method === "POST" && (url === "/start" || url === "/control/start" || url === "/api/control/start")) {
+    const token = String(req.headers.authorization || req.headers["x-api-key"] || "").replace(/^Bearer\s+/i, "").trim();
+    if (CF_TOKEN && token !== CF_TOKEN) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "unauthorized" }));
+      return;
+    }
+    const proxyReq = http.request({
+      hostname: "127.0.0.1",
+      port: INTERNAL_PORT,
+      path: "/api/control/start",
+      method: "POST",
+      headers: { host: `127.0.0.1:${INTERNAL_PORT}` }
+    }, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+      proxyRes.pipe(res);
+    });
+    proxyReq.on("error", (err) => {
+      res.writeHead(502, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+    });
+    proxyReq.end();
     return;
   }
   if (req.method === "POST" && url === "/egress") {
