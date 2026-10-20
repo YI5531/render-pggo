@@ -79,6 +79,9 @@ async function main() {
           console.error(`[sync] ✖ label=${cred.label || cred.id} 导入失败：${e.message}`);
         }
       }
+      if (changed.length > 0) {
+        await triggerStartService();
+      }
       backoff = 0;
     } catch (e) {
       backoff = Math.min(backoff ? backoff * 2 : POLL_MS, 10 * 60_000);
@@ -232,6 +235,17 @@ async function ensureSession() {
     : [res.headers.get("set-cookie") || ""];
   sessionCookie = cookies.map((line) => String(line).split(";")[0]).filter(Boolean).join("; ");
   return sessionCookie;
+}
+
+async function triggerStartService() {
+  try {
+    const res = await adminFetch("/api/control/start", { method: "POST" });
+    if (res.ok) {
+      log("✔ 已触发 AIStudio2API 服务启动 (POST /api/control/start)");
+    }
+  } catch (e) {
+    // 忽略启动异常
+  }
 }
 
 // ==================== 工具 ====================

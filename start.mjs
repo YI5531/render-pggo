@@ -29,7 +29,7 @@ function startAiStudio2Api() {
     WAA_BACKEND: process.env.WAA_BACKEND || "go",
     UPSTREAM_CHANNELS: process.env.UPSTREAM_CHANNELS || "playground,build",
     ADMIN_AUTH_ENABLED: "false",
-    AUTO_START: "false",
+    AUTO_START: "true",
   };
   console.log(`[render-pggo] 启动 aistudio2api (${env.LISTEN_ADDR}, WAA_BACKEND=${env.WAA_BACKEND})`);
   const child = spawn("aistudio2api", ["-open-ui=false"], { env, cwd: "/data", stdio: "inherit" });
