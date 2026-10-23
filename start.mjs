@@ -80,19 +80,28 @@ async function handleEgress(req, res) {
   const bodyBuf = Buffer.concat(chunks);
 
   const forwardHeaders = {};
-  const skip = new Set(["host", "connection", "content-length", "x-egress-target", "x-egress-token"]);
+  const skip = new Set([
+    "host", "connection", "content-length",
+    "x-egress-target", "x-egress-token", "x-egress-no-redirect",
+  ]);
   for (const [k, v] of Object.entries(req.headers)) {
     if (skip.has(k.toLowerCase()) || v === undefined) continue;
     forwardHeaders[k] = Array.isArray(v) ? v.join(", ") : String(v);
   }
+
+  // 跳转交给调用方判断：Google 的 /sorry 反滥用页会形成
+  // gemini.google.com/app → www.google.com/sorry → app?google_abuse=… 的循环，
+  // 中继自己 follow 只会拿到最后一页或者 "Too many redirects"。
+  const noRedirect = String(req.headers["x-egress-no-redirect"] || "") === "1";
 
   try {
     const upstream = await fetch(target, {
       method: req.method || "POST",
       headers: forwardHeaders,
       body: bodyBuf.length ? bodyBuf : undefined,
+      redirect: noRedirect ? "manual" : "follow",
     });
-    const outHeaders = {};
+    const outHeaders = { "x-egress-via": "render-pggo" };
     upstream.headers.forEach((v, k) => {
       if (k.toLowerCase() === "content-encoding" || k.toLowerCase() === "transfer-encoding") return;
       outHeaders[k] = v;
@@ -183,7 +192,9 @@ const server = http.createServer((req, res) => {
     proxyReq.end();
     return;
   }
-  if (req.method === "POST" && url === "/egress") {
+  // GET/HEAD 也要放行：Robin 的网页会话要 GET gemini.google.com/app，
+  // 只收 POST 时这条链路走不了中继。body 为空就当 GET 转发。
+  if ((req.method === "POST" || req.method === "GET" || req.method === "HEAD") && url === "/egress") {
     handleEgress(req, res);
     return;
   }
