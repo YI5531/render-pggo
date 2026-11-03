@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Render 免费容器统一入口（start.mjs）：
- *  1. 在 127.0.0.1:2048 启动 AIStudio2API（强制 WAA_BACKEND=go 纯 Go 虚拟机签名，免 Chromium，内存 < 80MB）；
+ *  1. 在 127.0.0.1:2048 启动 AIStudio2API（WAA_BACKEND=spidermonkey：进程内 SpiderMonkey 签名，不启动浏览器）；
  *  2. 后台周期运行 pg-node/sync.mjs，容器每次冷启动或唤醒时自动从 Cloudflare D1 拉取加密 Cookie + 指纹恢复账号；
  *  3. 对外监听 Render 分配的 PORT（默认 10000）：
  *     - GET /health：健康探针（供 Render 存活检查与 Cloudflare Worker 每 10 分钟 Cron 保活）；
@@ -18,6 +18,14 @@ const INTERNAL_BASE = `http://127.0.0.1:${INTERNAL_PORT}`;
 const CF_BASE = String(process.env.CF_BASE || "").trim().replace(/\/+$/, "");
 const CF_TOKEN = String(process.env.CF_TOKEN || process.env.ACCESS_KEY || "").trim();
 
+function upstreamChannels() {
+  const allowBuild = process.env.ENABLE_BUILD_CHANNEL === "1";
+  const list = String(process.env.UPSTREAM_CHANNELS || "playground")
+    .split(",").map((s) => s.trim().toLowerCase())
+    .filter((c) => c && (c !== "build" || allowBuild));
+  return [...new Set(list)].join(",") || "playground";
+}
+
 function startAiStudio2Api() {
   // 环境变量名对照上游 .env.example / internal/config/config.go 核对：
   // 监听地址是 LISTEN_ADDR（不是 HOST/PORT），API 密钥是 PROXY_API_KEY，账户目录 AISTUDIO_AUTH_STATES，
@@ -26,9 +34,14 @@ function startAiStudio2Api() {
     ...process.env,
     LISTEN_ADDR: `127.0.0.1:${INTERNAL_PORT}`,
     PROXY_API_KEY: process.env.PROXY_API_KEY || process.env.API_KEY || "",
-    WAA_BACKEND: process.env.WAA_BACKEND || "go",
-    UPSTREAM_CHANNELS: process.env.UPSTREAM_CHANNELS || "playground,build",
-    BUILD_NATIVE_NONSTREAM: process.env.BUILD_NATIVE_NONSTREAM || "true",
+    // v0.2.18 起纯 Go 解释器换成了 SpiderMonkey（"go" 仍被当作别名接受）。
+    WAA_BACKEND: process.env.WAA_BACKEND || "spidermonkey",
+    // 上游已对账户停用 Build 代理生成（PROXY_GENERATION_DISABLED），默认只走 Playground；
+    // 再开 build 只会让每个非流式请求先撞一次必败的 Build。
+    // Render 控制台里旧的 `playground,build` 会覆盖默认值，所以这里主动剔除 build；
+    // 真要试 Build 通道时设 ENABLE_BUILD_CHANNEL=1。
+    UPSTREAM_CHANNELS: upstreamChannels(),
+    BUILD_NATIVE_NONSTREAM: process.env.BUILD_NATIVE_NONSTREAM || "false",
     ADMIN_AUTH_ENABLED: "false",
     AUTO_START: "true",
   };

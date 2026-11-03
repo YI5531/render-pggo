@@ -15,6 +15,6 @@ services:
       - key: PROXY_API_KEY
         sync: false
       - key: WAA_BACKEND
-        value: go
+        value: spidermonkey
       - key: UPSTREAM_CHANNELS
-        value: playground,build
+        value: playground

@@ -14,7 +14,7 @@
  *   PROVIDER_ID        可选；只同步绑定该 pggo 渠道的凭据
  *   POLL_MS            默认 60000
  *   ONESHOT            1 = 跑一轮就退出
- *   REIMPORT_EXISTING  1 = 账户已存在时先 DELETE 再重新导入（默认 0，只告警）
+ *   REIMPORT_EXISTING  账户已存在时先 DELETE 再重新导入；默认开启，设为 0 才只告警
  *   LOCALE / TIMEZONE  默认 zh-CN / Asia/Shanghai
  *   SYNC_STATE         状态文件路径（只存 cookie_hash，不存 Cookie）
  *
@@ -46,6 +46,8 @@ if (!CF_BASE || !CF_TOKEN) {
 
 let sessionCookie = "";
 let stopping = false;
+const MISSING_REIMPORT_MS = 10 * 60_000;
+const missingImportAt = new Map();
 
 process.on("SIGINT", () => { stopping = true; console.log("\n[sync] 收到 SIGINT，退出"); process.exit(0); });
 process.on("SIGTERM", () => { stopping = true; process.exit(0); });
@@ -62,7 +64,20 @@ async function main() {
   while (!stopping) {
     try {
       const credentials = await fetchCredentials();
-      const changed = credentials.filter((c) => state[c.id] !== c.cookie_hash);
+      // 只比 cookie_hash 不够：AIStudio2API 自己删掉账户（登录失效清理、数据目录被清空）后，
+      // hash 没变就永远不会重新导入，服务会一直停在「没有账户」的 service_stopped。
+      // 所以每轮再核对一次账户是否真的还在；列表拿不到时退回只比 hash。
+      const present = await listAccountLabels();
+      const now = Date.now();
+      const changed = credentials.filter((c) => {
+        if (state[c.id] !== c.cookie_hash) return true;
+        if (!present || present.has(labelOf(c))) return false;
+        // 缺失重导限速：万一上游存的 label 和我们提交的对不上，别每轮删一次建一次。
+        if (now - (missingImportAt.get(c.id) || 0) < MISSING_REIMPORT_MS) return false;
+        missingImportAt.set(c.id, now);
+        log(`账户在 AIStudio2API 中缺失，重新导入 label=${c.label || c.id}`);
+        return true;
+      });
       if (!changed.length) {
         log(`无变化（${credentials.length} 条凭据）`);
       }
@@ -131,6 +146,8 @@ async function importCredential(cred) {
   const fp = cred.fingerprint && typeof cred.fingerprint === "object" ? cred.fingerprint : null;
   const payload = {
     label: cred.label || "default",
+    // 多登录 Cookie 里同一套会话对应 /u/0../u/N；不传就恒为 0，会导入成别的账号。
+    auth_user: Number.isInteger(Number(cred.authuser)) && Number(cred.authuser) > 0 ? Number(cred.authuser) : 0,
     locale: fp?.language || LOCALE,
     timezone: fp?.timezone || TIMEZONE,
     // AIStudio2API 的 StateCookie 用 `expires`（秒），Playwright 的 storage_state 叫
@@ -202,6 +219,23 @@ async function postAccount(token, payload) {
     headers: { "content-type": "application/json", authorization: "Bearer " + token },
     body: JSON.stringify(payload),
   });
+}
+
+function labelOf(cred) {
+  return String(cred.label || "default").trim().toLowerCase();
+}
+
+/** AIStudio2API 里现有账户的 label（小写）集合；接口不可用时返回 null。 */
+async function listAccountLabels() {
+  try {
+    const res = await adminFetch("/api/accounts");
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => null);
+    if (!Array.isArray(json?.accounts)) return null;
+    return new Set(json.accounts.map((a) => String(a.label || a.id || "").trim().toLowerCase()));
+  } catch {
+    return null;
+  }
 }
 
 async function findAccountId(label) {

@@ -1,7 +1,7 @@
 # Render 免费容器部署指南（PGGO 无头凭证 + Build 反代 + OpenCode 出口中继）
 
 本目录提供针对 **Render Free Web Service (512MB RAM、无持久磁盘)** 定制的轻量级容器方案，一机三用：
-1. **PGGO 无头执行器**：内置 `AIStudio2API` 并强制开启 `WAA_BACKEND=go`（纯 Go 虚拟机解算 WAA 签名，不启动 Chromium，常驻内存 `< 80MB`）。
+1. **PGGO 无头执行器**：内置 `AIStudio2API`（复用官方镜像 `ghcr.io/mag1cfall/aistudio2api:v0.2.19` 的静态二进制），默认 `WAA_BACKEND=spidermonkey`（进程内 SpiderMonkey 解算 WAA 签名，不启动浏览器）；默认只开 `playground` 通道（上游已停用 Build 代理生成，`build` 会被 start.mjs 剔除，需要时设 `ENABLE_BUILD_CHANNEL=1`）。
 2. **Cloudflare D1 凭证自动恢复**：内置守护进程运行 `pg-node/sync.mjs`（默认开启 `REIMPORT_EXISTING=1`），即使 Render 免费容器重启清空磁盘，也会在启动 3 秒内自动从 Cloudflare D1 拉取加密 Cookie 与浏览器指纹完成无感恢复。
 3. **Build 反代 `-build` 通道 & OpenCode `/egress` 换 IP 中继**：
    - 支持直接调用 AIStudio2API 的 `-build` 通道（或在网关配置 `kind = build` 指向本容器）；
@@ -21,7 +21,7 @@
    | --- | --- | --- |
    | `CF_BASE` | `https://你的网关域名.workers.dev` | Cloudflare Worker 网关地址 |
    | `CF_TOKEN` | `yi5531` | 网关主令牌 `ACCESS_KEY`（或 `PG_PULL_TOKEN`） |
-   | `WAA_BACKEND` | `go` | 强制使用纯 Go WAA 签名后端（默认已设为 `go`） |
+   | `WAA_BACKEND` | `spidermonkey` | WAA 签名后端（`go` 是旧名，仍被当作 `spidermonkey`） |
    | `API_KEY` | `yi5531` | 可选，映射为上游 `PROXY_API_KEY`（保护 `/v1/*`；**对外暴露务必设置**） |
 
 ---
