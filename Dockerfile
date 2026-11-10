@@ -6,7 +6,7 @@
 #
 # 升级：改 AISTUDIO2API_IMAGE 的 tag（ghcr.io/mag1cfall/aistudio2api 的 tags/list），
 # 不要用 latest——Render 只在重新部署时拉取，latest 会让「哪个版本在线上」变得不可知。
-ARG AISTUDIO2API_IMAGE=ghcr.io/mag1cfall/aistudio2api:v0.3.4
+ARG AISTUDIO2API_IMAGE=ghcr.io/mag1cfall/aistudio2api:v0.3.5
 FROM ${AISTUDIO2API_IMAGE} AS upstream
 
 FROM node:22-bookworm-slim
