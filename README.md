@@ -1,7 +1,7 @@
 # Render 免费容器部署指南（PGGO 无头凭证 + Build 反代 + OpenCode 出口中继）
 
 本目录提供针对 **Render Free Web Service (512MB RAM、无持久磁盘)** 定制的轻量级容器方案，一机三用：
-1. **PGGO 无头执行器**：内置 `AIStudio2API`（复用官方镜像 `ghcr.io/mag1cfall/aistudio2api:v0.2.19` 的静态二进制），默认 `WAA_BACKEND=spidermonkey`（进程内 SpiderMonkey 解算 WAA 签名，不启动浏览器）；默认只开 `playground` 通道（上游已停用 Build 代理生成，`build` 会被 start.mjs 剔除，需要时设 `ENABLE_BUILD_CHANNEL=1`）。
+1. **PGGO 无头执行器**：内置 `AIStudio2API`（复用官方镜像 `ghcr.io/mag1cfall/aistudio2api:v0.3.4` 的静态二进制），默认 `WAA_BACKEND=spidermonkey`（进程内 SpiderMonkey 解算 WAA 签名，不启动浏览器）；默认只开 `playground` 通道（上游已停用 Build 代理生成，`build` 会被 start.mjs 剔除，需要时设 `ENABLE_BUILD_CHANNEL=1`）。
 2. **Cloudflare D1 凭证自动恢复**：内置守护进程运行 `pg-node/sync.mjs`（默认开启 `REIMPORT_EXISTING=1`），即使 Render 免费容器重启清空磁盘，也会在启动 3 秒内自动从 Cloudflare D1 拉取加密 Cookie 与浏览器指纹完成无感恢复。
 3. **Build 反代 `-build` 通道 & OpenCode `/egress` 换 IP 中继**：
    - 支持直接调用 AIStudio2API 的 `-build` 通道（或在网关配置 `kind = build` 指向本容器）；
@@ -31,5 +31,5 @@
 1. 部署完成后拿到 Render 地址（例如 `https://my-pggo.onrender.com`）。
 2. 打开网关控制台 `/stats` → **第三方渠道**，新增：
    - **无头 PGGO 渠道**：类型选 `pggo`，Base URL 填 `https://my-pggo.onrender.com`，密钥填 `API_KEY`。
-   - **Build 容器渠道（可选）**：类型选 `build`，Base URL 填 `https://my-pggo.onrender.com`，模型填 `build-gemini-2.5-pro`。
+   - **Build 容器渠道（可选）**：类型选 `build`，Base URL 填 `https://my-pggo.onrender.com`，模型填 `build-gemini-3.8-flash`、`build-gemini-4-argon` 等（网关会改写成容器的写代码助手模型 `gemini-X-build`；容器 `/v1/models` 里带 `-build` 的才可用）。
 3. **自动保活**：网关的 `*/10 * * * *` Cron 任务会自动扫描所有已启用且 `base_url` 含 `.onrender.com` 的渠道并每 10 分钟请求一次 `/health`，无需手工修改代码即可防止 Render 休眠。
