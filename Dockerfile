@@ -13,10 +13,6 @@ FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
 ENV TZ=Asia/Shanghai
 COPY --from=upstream /usr/local/bin/aistudio2api /usr/local/bin/aistudio2api
-# 临时调试（2026-11-18）：指定 AISTUDIO2API_BIN_URL 时用该二进制覆盖官方二进制，并打开原始帧日志
-ARG AISTUDIO2API_BIN_URL=https://github.com/YI5531/render-pggo/releases/download/rawdump-v0.3.11/aistudio2api
-RUN if [ -n "$AISTUDIO2API_BIN_URL" ]; then apt-get update && apt-get install -y --no-install-recommends curl && curl -fsSL "$AISTUDIO2API_BIN_URL" -o /usr/local/bin/aistudio2api && chmod +x /usr/local/bin/aistudio2api && rm -rf /var/lib/apt/lists/*; fi
-ENV A2A_RAWDUMP=1
 WORKDIR /app
 COPY sync.mjs /app/pg-node/sync.mjs
 COPY start.mjs /app/start.mjs
