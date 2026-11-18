@@ -1,0 +1,32 @@
+name: build-rawdump
+on:
+  push:
+    branches: [debug-rawdump]
+    paths: [debug-rawdump/**, .github/workflows/rawdump.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch upstream v0.3.11 and patch
+        run: |
+          git clone --depth 1 --branch v0.3.11 https://github.com/Mag1cFall/AIStudio2API.git up
+          cp debug-rawdump/rawdump.go up/internal/aistudio/rawdump.go
+          sed -i 's|^\treturn decodeGenerateItems(source, func(raw json.RawMessage) error {$|&\n\t\tdumpRawFrame(raw)|' up/internal/aistudio/generate.go
+          grep -n "dumpRawFrame(raw)" up/internal/aistudio/generate.go
+          printf '\nFROM scratch AS bin\nCOPY --from=build /out/aistudio2api /aistudio2api\n' >> up/Dockerfile
+      - uses: docker/setup-buildx-action@v3
+      - name: Build static binary
+        run: |
+          cd up
+          docker buildx build --platform linux/amd64 --target bin --output type=local,dest=../out .
+          ls -la ../out
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete rawdump-v0.3.11 --yes --cleanup-tag || true
+          gh release create rawdump-v0.3.11 out/aistudio2api --target "$GITHUB_SHA" --prerelease --title "rawdump v0.3.11 (debug)" --notes "临时调试二进制，验证完删除"
